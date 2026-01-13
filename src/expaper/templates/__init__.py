@@ -33,16 +33,16 @@ def list_templates() -> None:
     table.add_column("Description")
 
     descriptions = {
-        "icml2026": "ICML 2026 conference format",
-        "neurips2025": "NeurIPS 2025 conference format",
-        "arxiv": "arXiv preprint format",
-        "blank": "Minimal LaTeX document",
+        "blank": "Minimal LaTeX document for local-first workflows",
     }
 
     for name in sorted(templates):
         table.add_row(name, descriptions.get(name, ""))
 
     console.print(table)
+    console.print("\n[dim]For conference templates (ICML, NeurIPS, ICLR), use Overleaf's gallery:[/dim]")
+    console.print("[dim]  1. Create project from template at overleaf.com/gallery[/dim]")
+    console.print("[dim]  2. Link with: expaper link-overleaf <url>[/dim]")
 
 
 def create_from_template(template_name: str) -> None:
