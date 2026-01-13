@@ -243,6 +243,107 @@ When expaper creates a project, it generates a CLAUDE.md with:
 
 See `scaffold.py:create_claude_md()` for template.
 
+## LRW Infrastructure Detection
+
+When expaper detects LRW-specific infrastructure (e.g., shop integration, specific tool patterns), it should generate **delegated CLAUDE.md files** in subdirectories rather than a single root-level file.
+
+### Detection Signals
+Look for these patterns indicating LRW infrastructure:
+- `shop/` directory or shop-related configs
+- Tools from LRW registry (manylatents, geomancy, etc.)
+- Hydra configs with LRW-specific patterns
+- `.shop.yaml` or similar config files
+
+### Delegated CLAUDE.md Structure
+
+When LRW infrastructure is detected, generate:
+
+```
+project/
+├── CLAUDE.md                    # Root: project overview + delegation
+├── experiments/
+│   └── CLAUDE.md                # Agentic context for running experiments
+└── paper/
+    └── CLAUDE.md                # Agentic context for paper writing
+```
+
+### Root CLAUDE.md (with LRW)
+Should include:
+- Brief project overview
+- **Delegation instructions**: "For experiment work, see `experiments/CLAUDE.md`. For paper work, see `paper/CLAUDE.md`."
+- Cross-cutting concerns (shared figures, bibliography sync)
+
+### experiments/CLAUDE.md
+Agentic context for experiment workflows:
+- Tool-specific commands and entrypoints
+- Hydra config structure and overrides
+- How to run experiments (`run_experiment`)
+- How to snapshot for reproducibility (`snapshot_experiment`)
+- Output directory conventions
+- Shop integration specifics (if present)
+
+### paper/CLAUDE.md
+Agentic context for paper writing:
+- LaTeX structure and main entry point
+- Figure inclusion conventions (paths to shared/figures)
+- Bibliography management (shared/bib)
+- Conference-specific formatting notes
+
+**Overleaf-specific guidance:**
+- Sync workflow: `expaper sync pull` before editing, `expaper sync push` after
+- Credential handling (git credential helper)
+- Conflict resolution when collaborators edit simultaneously
+- What NOT to do: don't edit directly on Overleaf while local changes are uncommitted
+- Commit message conventions for paper changes
+
+### Overleaf Workflow Context (for paper/CLAUDE.md)
+
+When generating `paper/CLAUDE.md`, include this Overleaf workflow:
+
+```markdown
+## Overleaf Sync Workflow
+
+This paper is synced with Overleaf via git subtree.
+
+### Before Editing
+Always pull latest changes first:
+```bash
+cd ..  # project root
+expaper sync pull
+```
+
+### After Editing
+Commit and push your changes:
+```bash
+cd ..  # project root
+git add paper/ && git commit -m "Update: <description>"
+expaper sync push
+```
+
+### Collaboration Notes
+- Overleaf collaborators edit in real-time on overleaf.com
+- You edit locally and sync via git
+- Always pull before starting work to avoid conflicts
+- If conflicts occur, resolve in paper/ then commit
+
+### Credentials
+If prompted for credentials:
+- Username: your Overleaf email
+- Password: Overleaf password or Git token (Account Settings)
+```
+
+### Implementation Location
+This logic should be added to `scaffold.py:create_claude_md()`:
+1. Check for LRW infrastructure signals
+2. If detected: generate three CLAUDE.md files with delegation
+3. If not detected: generate single root CLAUDE.md (current behavior)
+
+### Why Delegation?
+- **Context efficiency**: Claude works in one directory at a time; relevant context should be local
+- **Workflow separation**: Experiment running vs paper writing are distinct agentic tasks
+- **Tool awareness**: experiments/CLAUDE.md can reference specific tool docs/patterns
+- **Reduced noise**: Paper context doesn't need experiment details and vice versa
+
 ## Future Enhancements
 
 Potential improvements:
@@ -251,3 +352,4 @@ Potential improvements:
 - Support for non-master Overleaf branches
 - Hooks for pre/post sync operations
 - Figure sync between experiments/outputs and paper/figures
+- **LRW infrastructure auto-detection and delegated CLAUDE.md generation**
