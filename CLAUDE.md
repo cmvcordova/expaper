@@ -268,10 +268,38 @@ project/
 ```
 
 ### Root CLAUDE.md (with LRW)
-Should include:
-- Brief project overview
-- **Delegation instructions**: "For experiment work, see `experiments/CLAUDE.md`. For paper work, see `paper/CLAUDE.md`."
-- Cross-cutting concerns (shared figures, bibliography sync)
+
+The root CLAUDE.md serves as **orchestrator**, delegating to subdirectory contexts:
+
+```markdown
+# {project_name}
+
+Research project combining experiments and paper writing.
+
+## Delegation
+
+**This project has specialized context files:**
+
+- **Experiments**: See `experiments/CLAUDE.md` for running experiments, tool configs, Hydra workflows
+- **Paper**: See `paper/CLAUDE.md` for paper writing, Overleaf sync, narrative directives
+
+When working in a subdirectory, read its CLAUDE.md first.
+
+## Cross-Cutting Concerns
+
+### Shared Resources
+- `shared/figures/` - Figures used in paper (generated from experiments)
+- `shared/bib/` - Bibliography files
+
+### Figure Workflow
+1. Run experiment → outputs to `experiments/outputs/`
+2. Generate figure → save to `shared/figures/`
+3. Include in paper → `\includegraphics{../shared/figures/...}`
+
+### Sync Status
+- Overleaf: `expaper sync status`
+- Tools: Check `experiments/configs/meta.yaml`
+```
 
 ### experiments/CLAUDE.md
 Agentic context for experiment workflows:
