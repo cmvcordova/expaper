@@ -296,41 +296,88 @@ Agentic context for paper writing:
 - What NOT to do: don't edit directly on Overleaf while local changes are uncommitted
 - Commit message conventions for paper changes
 
-### Overleaf Workflow Context (for paper/CLAUDE.md)
+### paper/CLAUDE.md Template
 
-When generating `paper/CLAUDE.md`, include this Overleaf workflow:
+Each Overleaf-linked paper gets its own CLAUDE.md with:
+1. **Overleaf sync workflow** (generic)
+2. **Experiment context** (project-specific)
+3. **Narrative directives** (project-specific)
 
 ```markdown
-## Overleaf Sync Workflow
+# Paper: {project_name}
+
+## Overleaf Sync
 
 This paper is synced with Overleaf via git subtree.
 
-### Before Editing
-Always pull latest changes first:
-```bash
-cd ..  # project root
-expaper sync pull
-```
-
-### After Editing
-Commit and push your changes:
-```bash
-cd ..  # project root
-git add paper/ && git commit -m "Update: <description>"
-expaper sync push
-```
-
-### Collaboration Notes
-- Overleaf collaborators edit in real-time on overleaf.com
-- You edit locally and sync via git
-- Always pull before starting work to avoid conflicts
-- If conflicts occur, resolve in paper/ then commit
+### Workflow
+1. Pull before editing: `cd .. && expaper sync pull`
+2. Edit paper files
+3. Commit and push: `git add paper/ && git commit -m "msg" && cd .. && expaper sync push`
 
 ### Credentials
-If prompted for credentials:
-- Username: your Overleaf email
-- Password: Overleaf password or Git token (Account Settings)
+- Username: Overleaf email
+- Password: Overleaf password or Git token
+
+---
+
+## Experiment Context
+
+This paper documents experiments from `../experiments/`.
+
+### Key Experiments
+<!-- Populated based on experiments/configs/ -->
+- **{experiment_1}**: {brief description}
+- **{experiment_2}**: {brief description}
+
+### Results Location
+- Outputs: `../experiments/outputs/`
+- Figures: `../shared/figures/`
+
+### Reproducibility
+To regenerate results:
+```bash
+cd ../experiments
+python scripts/run_experiment {tool} {config}
 ```
+
+---
+
+## Narrative Directives
+
+### Paper Thesis
+<!-- User should fill this in -->
+{What is this paper arguing/demonstrating?}
+
+### Key Claims
+1. {Claim 1 - supported by which experiment?}
+2. {Claim 2 - supported by which experiment?}
+
+### Story Arc
+- **Problem**: {What problem does this solve?}
+- **Approach**: {What's the method/contribution?}
+- **Evidence**: {Which experiments support this?}
+- **Impact**: {Why does this matter?}
+
+### Writing Guidelines
+- Keep methods reproducible (reference configs)
+- Figures should be generated from experiment outputs
+- Claims must map to specific experimental results
+```
+
+### Why Per-Paper CLAUDE.md?
+
+Each paper has unique:
+- **Experiments it covers**: Different subset of tools/configs
+- **Narrative**: What story is being told
+- **Claims**: What's being argued, backed by which data
+- **Audience**: Conference-specific framing (ICML vs NeurIPS vs workshop)
+
+This context helps Claude:
+- Write sections that connect to actual experiment results
+- Maintain narrative consistency across edits
+- Know which figures/tables to reference
+- Avoid making claims not supported by experiments
 
 ### Implementation Location
 This logic should be added to `scaffold.py:create_claude_md()`:
