@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""
+Mode A: Run experiment using development configs.
+
+Usage:
+  python scripts/run_experiment manylatents eval_algorithm
+  python scripts/run_experiment manylatents eval_algorithm --validate-only
+  python scripts/run_experiment manylatents eval_algorithm seed=123
+"""
+
+import argparse
+import os
+import signal
+import subprocess
+import sys
+import threading
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
+
+
+def load_meta() -> dict:
+    """Load meta.yaml."""
+    meta_path = Path("configs/meta.yaml")
+    if not meta_path.exists():
+        print("[ERROR] configs/meta.yaml not found")
+        sys.exit(1)
+    return yaml.safe_load(meta_path.read_text())
+
+
+def find_config(tool: str, config_path: str) -> Optional[Path]:
+    """Find the experiment config file."""
+    config_file = Path(f"configs/{tool}/experiment/{config_path}.yaml")
+    if config_file.exists():
+        return config_file
+
+    # Try without .yaml
+    config_file = Path(f"configs/{tool}/experiment/{config_path}")
+    if config_file.exists():
+        return config_file
+
+    return None
+
+
+def build_command(tool_info: dict, tool: str, config_path: str, extra_args: List[str]) -> List[str]:
+    """Build the command to run."""
+    entrypoint = tool_info["entrypoint"]
+    tool_dir = Path(tool_info["path"]).resolve()
+    config_dir = Path(f"configs/{tool}").resolve()
+
+    if entrypoint.startswith("-m "):
+        # Module invocation: python -m module.name
+        module = entrypoint[3:]
+        cmd = ["python", "-m", module]
+    else:
+        # Script invocation: python script.py
+        cmd = ["python", entrypoint]
+
+    # Add Hydra arguments
+    cmd.extend([
+        f"--config-path={config_dir}",
+        f"--config-name=experiment/{config_path}",
+    ])
+
+    # Add extra arguments
+    cmd.extend(extra_args)
+
+    return cmd, tool_dir
+
+
+def run_with_timeout(cmd: List[str], cwd: Path, timeout: int = 300) -> int:
+    """Run command with timeout and output monitoring."""
+    process = None
+    last_output_time = [0.0]
+
+    def handle_signal(signum, frame):
+        if process:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    # Check if in venv
+    in_venv = sys.prefix != sys.base_prefix
+
+    if in_venv:
+        process = subprocess.Popen(cmd, cwd=cwd)
+    else:
+        # Use uv run
+        process = subprocess.Popen(["uv", "run"] + cmd, cwd=cwd)
+
+    try:
+        process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        print(f"[ERROR] Process timed out after {timeout} seconds")
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+        return 1
+
+    return process.returncode
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run an experiment")
+    parser.add_argument("tool", help="Tool name (e.g., manylatents)")
+    parser.add_argument("config", help="Config path relative to configs/<tool>/experiment/")
+    parser.add_argument("--validate-only", action="store_true", help="Validate config without running")
+    args, extra_args = parser.parse_known_args()
+
+    # Validate environment
+    if not Path("configs").exists():
+        print("[ERROR] configs/ directory not found. Run from project root.")
+        sys.exit(1)
+
+    if not Path("tools").exists():
+        print("[ERROR] tools/ directory not found. Run from project root.")
+        sys.exit(1)
+
+    # Load metadata
+    meta = load_meta()
+    tools = meta.get("tools", {})
+
+    if args.tool not in tools:
+        print(f"[ERROR] Tool '{args.tool}' not found in meta.yaml")
+        print(f"Available tools: {', '.join(tools.keys()) or 'none'}")
+        sys.exit(1)
+
+    tool_info = tools[args.tool]
+
+    # Find config
+    config_file = find_config(args.tool, args.config)
+    if not config_file:
+        print(f"[ERROR] Config not found: configs/{args.tool}/experiment/{args.config}.yaml")
+        sys.exit(1)
+
+    print(f"[INFO] Tool: {args.tool}")
+    print(f"[INFO] Config: {config_file}")
+    print(f"[INFO] Entrypoint: {tool_info['entrypoint']}")
+
+    if args.validate_only:
+        extra_args.append("--cfg=job")
+        print("[INFO] Validation mode (--cfg=job)")
+
+    # Build and run command
+    cmd, cwd = build_command(tool_info, args.tool, args.config, extra_args)
+    print(f"[INFO] Command: {' '.join(cmd)}")
+    print(f"[INFO] Working dir: {cwd}")
+    print("=" * 60)
+
+    return run_with_timeout(cmd, cwd)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,20 @@
+# Bundled tool registry for expaper
+# Users can extend via ~/.config/expaper/registry.yaml
+
+tools:
+  # Example tools - update with actual repositories
+  hydra-test-tool:
+    url: https://github.com/cmvcordova/hydra-test-tool
+    entrypoint: src/main.py
+    description: "Minimal Hydra tool for testing experimentStash integration"
+
+  # Add your commonly-used tools here:
+  # manylatents:
+  #   url: https://github.com/lrw/manylatents
+  #   entrypoint: "-m manylatents.main"
+  #   description: "Dimensionality reduction and latent space analysis"
+  #
+  # geomancy:
+  #   url: https://github.com/lrw/geomancy
+  #   entrypoint: "-m geomancy.main"
+  #   description: "Geometric deep learning toolkit"

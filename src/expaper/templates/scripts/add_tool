@@ -1,0 +1,152 @@
+#!/usr/bin/env python3
+"""
+Mode A: Add a Hydra-based tool to experimentStash.
+Copies tool configs for development/iteration.
+
+Usage:
+  python scripts/add_tool geomancy https://github.com/lrw/geomancy
+  python scripts/add_tool manylatents https://github.com/lrw/manylatents --entrypoint "-m manylatents.main"
+"""
+
+import argparse
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import List, Optional
+
+import yaml
+
+
+def run(cmd: List[str], cwd: Optional[Path] = None) -> bool:
+    """Run command, return success."""
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"[ERROR] {' '.join(cmd)}: {result.stderr}")
+        return False
+    return True
+
+
+def add_submodule(name: str, repo_url: str) -> bool:
+    """Add git submodule if not exists."""
+    tool_path = Path(f"tools/{name}")
+    if tool_path.exists():
+        print(f"[INFO] Tool already exists: {tool_path}")
+        return True
+
+    print(f"[INFO] Adding submodule: {repo_url} -> {tool_path}")
+    return run(["git", "submodule", "add", repo_url, f"tools/{name}"])
+
+
+def install_deps(name: str) -> bool:
+    """Install tool dependencies with uv."""
+    tool_path = Path(f"tools/{name}")
+    print(f"[INFO] Installing dependencies in {tool_path}")
+    return run(["uv", "sync"], cwd=tool_path)
+
+
+def copy_configs(name: str) -> bool:
+    """Copy tool configs to top-level."""
+    tool_config = Path(f"tools/{name}/{name}/configs")
+    if not tool_config.exists():
+        # Try alternate structure
+        tool_config = Path(f"tools/{name}/configs")
+
+    if not tool_config.exists():
+        print(f"[WARNING] No configs found at {tool_config}")
+        return True
+
+    dst = Path(f"configs/{name}")
+    dst.mkdir(parents=True, exist_ok=True)
+
+    # Copy all config directories
+    for item in tool_config.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, dst / item.name, dirs_exist_ok=True)
+            print(f"  Copied: {item.name}/")
+        elif item.suffix in (".yaml", ".yml"):
+            shutil.copy2(item, dst / item.name)
+            print(f"  Copied: {item.name}")
+
+    print(f"[INFO] Configs copied to {dst}")
+    return True
+
+
+def update_meta(name: str, entrypoint: str, description: str) -> bool:
+    """Add tool to meta.yaml."""
+    meta_path = Path("configs/meta.yaml")
+    meta = yaml.safe_load(meta_path.read_text())
+
+    if name in meta.get("tools", {}):
+        print(f"[INFO] Tool '{name}' already in meta.yaml")
+        return True
+
+    meta.setdefault("tools", {})[name] = {
+        "path": f"tools/{name}",
+        "entrypoint": entrypoint,
+        "description": description,
+    }
+
+    meta_path.write_text(yaml.dump(meta, default_flow_style=False, sort_keys=False))
+    print(f"[INFO] Added '{name}' to meta.yaml")
+    return True
+
+
+def verify_decorator(name: str) -> bool:
+    """Check if decorator allows CLI config overrides."""
+    main_py = Path(f"tools/{name}/{name}/main.py")
+    if not main_py.exists():
+        main_py = Path(f"tools/{name}/src/main.py")
+
+    if not main_py.exists():
+        print(f"[WARNING] Could not find main.py to verify decorator")
+        return True
+
+    content = main_py.read_text()
+    if "config_path=None" in content:
+        print("[OK] Decorator uses config_path=None (CLI-compatible)")
+        return True
+
+    print("[WARNING] Decorator has hardcoded config_path.")
+    print("         Change to: @hydra.main(config_path=None, config_name=None, version_base=None)")
+    return True  # Warning only, not failure
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Add a Hydra tool to experimentStash")
+    parser.add_argument("name", help="Tool name (e.g., geomancy)")
+    parser.add_argument("repo_url", help="Git repository URL")
+    parser.add_argument("--entrypoint", default=None, help="Entrypoint (default: -m <name>.main)")
+    parser.add_argument("--description", default="", help="Tool description")
+    parser.add_argument("--skip-deps", action="store_true", help="Skip dependency installation")
+    args = parser.parse_args()
+
+    entrypoint = args.entrypoint or f"-m {args.name}.main"
+    description = args.description or f"{args.name} - Hydra-based tool"
+
+    steps = [
+        ("Add submodule", lambda: add_submodule(args.name, args.repo_url)),
+        ("Install deps", lambda: install_deps(args.name) if not args.skip_deps else True),
+        ("Copy configs", lambda: copy_configs(args.name)),
+        ("Update meta.yaml", lambda: update_meta(args.name, entrypoint, description)),
+        ("Verify decorator", lambda: verify_decorator(args.name)),
+    ]
+
+    for step_name, step_fn in steps:
+        print(f"\n=== {step_name} ===")
+        if not step_fn():
+            print(f"[ERROR] Failed at: {step_name}")
+            return 1
+
+    print("\n" + "=" * 60)
+    print(f"[OK] Tool '{args.name}' added successfully!")
+    print("=" * 60)
+    print("\nSmoke test:")
+    print(f"  python scripts/run_experiment {args.name} <experiment> --validate-only")
+    print(f"\nRun experiment:")
+    print(f"  python scripts/run_experiment {args.name} <experiment>")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

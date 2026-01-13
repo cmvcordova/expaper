@@ -1,0 +1,165 @@
+# =============================================================================
+# LaTeX build artifacts
+# =============================================================================
+
+## Core latex/pdflatex auxiliary files
+*.aux
+*.lof
+*.log
+*.lot
+*.fls
+*.out
+*.toc
+*.fmt
+*.fot
+*.cb
+*.cb2
+.*.lb
+
+## Intermediate documents
+*.dvi
+*.xdv
+*-converted-to.*
+
+## Bibliography auxiliary files
+*.bbl
+*.bcf
+*.blg
+*-blx.aux
+*-blx.bib
+*.run.xml
+
+## Build tool auxiliary files
+*.fdb_latexmk
+*.synctex
+*.synctex(busy)
+*.synctex.gz
+*.synctex.gz(busy)
+*.pdfsync
+
+## Package-specific auxiliary files
+*.alg
+*.loa
+*.thm
+*.nav
+*.pre
+*.snm
+*.vrb
+*.soc
+*.cut
+*.cpt
+*.spl
+*.ent
+*.lox
+*.gnuplot
+*.table
+*.acn
+*.acr
+*.glg
+*.glo
+*.gls
+*.glsdefs
+*.lzo
+*.lzs
+*.slg
+*.slo
+*.sls
+*.brf
+*-concordance.tex
+*.tikz
+*-tikzDictionary
+*.lol
+*.idx
+*.ilg
+*.ind
+*.maf
+*.mlf
+*.mlt
+*.mtc[0-9]*
+*.slf[0-9]*
+*.slt[0-9]*
+*.stc[0-9]*
+_minted*
+*.pyg
+*.mw
+*.nlg
+*.nlo
+*.nls
+*.pax
+*.pdfpc
+*.sagetex.sage
+*.sagetex.py
+*.sagetex.scmd
+*.wrt
+svg-inkscape/
+*.sout
+*.sympy
+sympy-hierarchies/
+*.tdo
+*.xdy
+*.xyc
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+
+# =============================================================================
+# Experiment outputs
+# =============================================================================
+experiments/outputs/
+*.pt
+*.pth
+*.ckpt
+wandb/
+mlruns/
+
+# =============================================================================
+# Editors and IDEs
+# =============================================================================
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-*
+
+# =============================================================================
+# OS-specific files
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+
+# =============================================================================
+# Misc
+# =============================================================================
+*.tmp
+scratch/
+tmp/
