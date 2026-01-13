@@ -2,6 +2,51 @@
 
 Research project scaffolding tool combining **experimentStash** structure with **Overleaf** integration.
 
+## Standalone vs Monorepo
+
+expaper supports two modes:
+
+### Standalone Mode
+The expaper IS the git repository:
+```
+my-paper/                             # Git root = expaper root
+├── paper/                            # Subtree prefix: "paper"
+├── experiments/
+├── shared/
+└── CLAUDE.md
+```
+
+### Monorepo Mode
+The expaper is a subdirectory within a larger repo:
+```
+research-monorepo/                    # Git root
+├── CLAUDE.md                         # Monorepo orchestration
+├── first-paper/                      # expaper #1
+│   ├── paper/                        # Subtree prefix: "first-paper/paper"
+│   ├── experiments/
+│   ├── shared/
+│   └── CLAUDE.md
+├── second-paper/                     # expaper #2
+│   └── ...
+└── pyproject.toml                    # (optional) shared deps
+```
+
+### Key Difference: Subtree Prefix
+
+| Mode | Subtree prefix | Sync command |
+|------|----------------|--------------|
+| Standalone | `paper` | `git subtree pull --prefix=paper ...` |
+| Monorepo | `{expaper}/paper` | `git subtree pull --prefix=first-paper/paper ...` |
+
+expaper detects which mode by checking if cwd is the git root:
+- **At git root** → standalone (or run `expaper init` to create monorepo child)
+- **In subdirectory** → monorepo mode, prefix includes path from git root
+
+### Monorepo Benefits
+- Multiple papers sharing one git repo
+- Cross-referencing experiments between papers
+- Single source of truth for shared tools/configs
+
 ## Quick Reference
 
 ```bash
@@ -10,9 +55,9 @@ cd ~/expaper
 uv venv && source .venv/bin/activate
 uv pip install -e ".[dev]"
 
-# Run CLI
+# Run CLI (from monorepo root)
 expaper --help
-expaper init my-project --template blank
+expaper init my-paper --template blank    # Creates my-paper/ subdirectory
 expaper tool add hydra-test-tool
 expaper sync pull
 ```
@@ -51,20 +96,19 @@ Click-based CLI with these command groups:
 - `expaper link-overleaf <url>` - Link existing Overleaf project
 
 ### `scaffold.py` - Project Creation
-Creates directory structure:
+Creates an expaper subdirectory within a monorepo:
 ```
-project/
-├── experiments/
-│   ├── configs/meta.yaml       # Tool registry for this project
-│   ├── tools/                  # Git submodules
-│   ├── scripts/                # add_tool, run_experiment, snapshot_experiment
-│   ├── notebooks/
-│   └── outputs/
-├── paper/                      # Overleaf-synced (git subtree)
-├── shared/bib/, figures/
-├── .gitignore
-├── CLAUDE.md
-└── README.md
+monorepo/
+└── my-paper/                       # expaper subdirectory
+    ├── experiments/
+    │   ├── configs/meta.yaml       # Tool registry for this expaper
+    │   ├── tools/                  # Git submodules
+    │   ├── scripts/                # add_tool, run_experiment, snapshot_experiment
+    │   ├── notebooks/
+    │   └── outputs/
+    ├── paper/                      # Overleaf-synced (git subtree)
+    ├── shared/bib/, figures/, sty/
+    └── CLAUDE.md
 ```
 
 Key functions:
@@ -76,10 +120,20 @@ Key functions:
 ### `overleaf.py` - Overleaf Integration
 Uses **git subtree** (NOT submodule) for bidirectional sync.
 
+**Prefix depends on mode** (see "Standalone vs Monorepo" above):
+```bash
+# Standalone (expaper is git root):
+git subtree pull --prefix=paper overleaf master --squash
+
+# Monorepo (expaper is subdirectory):
+git subtree pull --prefix=my-paper/paper overleaf master --squash
+```
+
 Key functions:
-- `sync_pull()` - `git subtree pull --prefix=paper overleaf master --squash`
-- `sync_push()` - `git subtree push --prefix=paper overleaf master`
-- `link_overleaf()` - Adds remote and creates subtree
+- `get_subtree_prefix()` - Computes correct prefix based on git root location
+- `sync_pull()` - `git subtree pull --prefix={prefix} overleaf master --squash`
+- `sync_push()` - `git subtree push --prefix={prefix} overleaf master`
+- `link_overleaf()` - Adds remote and creates subtree with correct prefix
 
 ### `tools.py` - Tool Registry
 Manages experiment tools via registry lookup or direct URL.
@@ -148,23 +202,23 @@ In `create_project()`, the order matters:
 ## CLI Commands Reference
 
 ```bash
-# Create project
-expaper init my-project                           # Blank template
-expaper init my-project --overleaf URL            # Link Overleaf
-expaper init my-project --tools geomancy          # Add tool
-expaper init my-project --dry-run                 # Preview only
+# Create expaper
+expaper init my-paper                             # Creates my-paper/ (monorepo) or initializes cwd (standalone)
+expaper init my-paper --overleaf URL              # Link Overleaf during init
+expaper init my-paper --tools geomancy            # Add tool during init
+expaper init my-paper --dry-run                   # Preview only
 
-# Manage tools
+# Manage tools (run from expaper directory)
 expaper tool list                                 # Project tools
 expaper tool list --registry                      # Available tools
 expaper tool add geomancy                         # From registry
 expaper tool add mytool https://github.com/x/y   # From URL
 
-# Overleaf sync
+# Overleaf sync (run from expaper directory, auto-detects prefix)
 expaper sync pull                                 # Get changes
 expaper sync push                                 # Push changes
 expaper sync status                               # Show status
-expaper link-overleaf URL                         # Link existing
+expaper link-overleaf URL                         # Link existing Overleaf project
 
 # Templates
 expaper template list                             # Available templates
