@@ -1,114 +1,129 @@
-# expaper
+<div align="center">
 
-Research project scaffolding tool combining **experimentStash** structure with **Overleaf** integration.
+<pre>
+    paper/          experiments/
+   ┌────────┐      ┌──────────────┐
+   │ main.tex│ ←── │ tools/       │
+   │ bib/    │     │ configs/     │
+   │ figs/   │     │ outputs/     │
+   └────────┘      └──────────────┘
+        ↕                ↕
+     overleaf       experimentStash
 
-## Installation
+         e x p a p e r
+
+  reproducible research, from scaffold to camera-ready
+</pre>
+
+[![license](https://img.shields.io/badge/license-MIT-2DD4BF.svg)](LICENSE)
+[![python](https://img.shields.io/badge/python-3.11+-2DD4BF.svg)](https://www.python.org)
+[![uv](https://img.shields.io/badge/pkg-uv-2DD4BF.svg)](https://docs.astral.sh/uv/)
+
+</div>
+
+---
+
+## quickstart
 
 ```bash
-# With uv (recommended)
 uv pip install -e .
 
-# Or with pip
-pip install -e .
-```
-
-## Quick Start
-
-```bash
-# Create a new research project
+# interactive setup — prompts for tools and Overleaf
 expaper init my-research
 
-# Create with Overleaf integration
-expaper init my-research --overleaf https://git.overleaf.com/YOUR_PROJECT_ID
-
-# Add experiment tools
-expaper tool add geomancy
-expaper tool add mytool https://github.com/user/repo
-
-# Sync with Overleaf
-expaper sync pull   # Get collaborator changes
-expaper sync push   # Push your changes
+# or fully specified
+expaper init my-research \
+  --tools manylatents \
+  --overleaf https://git.overleaf.com/abc123
 ```
 
-## Generated Project Structure
+---
+
+## architecture
 
 ```
 my-research/
-├── experiments/           # experimentStash structure
-│   ├── configs/           # Hydra configurations
-│   │   └── meta.yaml      # Tool registry
-│   ├── tools/             # Git submodules
-│   ├── scripts/           # add_tool, run_experiment, snapshot_experiment
-│   ├── notebooks/         # Analysis notebooks
-│   └── outputs/           # Experiment results
-├── paper/                 # Overleaf-synced paper
-│   └── main.tex
-├── shared/                # Shared resources
-│   ├── bib/               # Bibliography
-│   └── figures/           # Figures for paper
-├── .gitignore
-├── CLAUDE.md              # AI assistant context
+├── experiments/           # experimentStash
+│   ├── configs/           # Hydra configs (copied from tools, read-only)
+│   │   └── meta.yaml      # tool registry
+│   ├── tools/             # git submodules (pinned tools)
+│   ├── scripts/           # add_tool, snapshot_experiment
+│   └── outputs/           # experiment results
+├── paper/                 # Overleaf-synced (git subtree)
+├── shared/
+│   ├── bib/               # bibliography
+│   └── figures/           # shared figures
+├── CLAUDE.md              # AI assistant context (delegates to tool CLAUDE.mds)
 └── README.md
 ```
 
-## Commands
+Three layers for config composition (highest to lowest precedence):
 
-### `expaper init`
+| Layer | Where | When |
+|-------|-------|------|
+| CLI overrides | command line | always available |
+| Experiment configs | `configs/<tool>/experiment/` | sweep definitions |
+| Base configs (read-only) | `configs/<tool>/` | copied from tool, never edited |
 
-Create a new research project:
+---
 
-```bash
-expaper init <name> [options]
-
-Options:
-  --path, -p       Parent directory (default: current)
-  --tools, -t      Tools to add (repeatable)
-  --overleaf, -o   Overleaf Git URL to link
-  --template       Paper template (default: blank)
-  --dry-run        Show what would be created
-```
-
-### `expaper tool`
-
-Manage experiment tools:
+## commands
 
 ```bash
-expaper tool add <name> [url]     # Add from registry or URL
-expaper tool list                  # List project tools
-expaper tool list --registry       # List available tools
+# create project (interactive wizard)
+expaper init <name>
+expaper init <name> --no-interactive   # skip prompts
+
+# add tools
+expaper tool add <name>              # from registry
+expaper tool add <name> <url>        # from URL
+expaper tool list --registry         # show available tools
+
+# overleaf sync
+expaper sync pull                    # pull collaborator changes
+expaper sync push                    # push local changes
+expaper sync status                  # check sync state
+expaper link-overleaf <url>          # link after project creation
+
+# paper templates
+expaper template list                # available templates
+expaper template create <name>       # apply template to paper/
+expaper template export              # export paper/ as ZIP
 ```
 
-### `expaper sync`
+---
 
-Sync with Overleaf:
+## workflow
 
-```bash
-expaper sync pull      # Pull from Overleaf
-expaper sync push      # Push to Overleaf
-expaper sync status    # Show sync status
+```
+1. expaper init my-paper --overleaf URL
+2. expaper tool add manylatents
+3. cd experiments/tools/manylatents
+   uv run python -m manylatents.main --multirun ...
+4. edit paper/main.tex with results
+5. expaper sync push
+6. python3 experiments/scripts/snapshot_experiment manylatents exp --tag v1
 ```
 
-### `expaper template`
+---
 
-Manage paper templates:
+## overleaf
 
-```bash
-expaper template list              # List templates
-expaper template create <name>     # Create paper from template
-expaper template export            # Export paper as ZIP
-```
+Overleaf has no API for creating projects. Create the project on Overleaf first, then link:
 
-### `expaper link-overleaf`
+1. Create project on [Overleaf](https://www.overleaf.com) (or from a conference template)
+2. Copy Git URL: Menu > Git > Copy URL
+3. `expaper init my-paper --overleaf https://git.overleaf.com/<id>`
 
-Link an existing Overleaf project:
+Or link later: `expaper link-overleaf https://git.overleaf.com/<id>`
 
-```bash
-expaper link-overleaf https://git.overleaf.com/YOUR_PROJECT_ID
-```
+Credentials: use `git config --global credential.helper store` to avoid re-entering.
 
-## Tool Registry
+---
 
-expaper includes a bundled registry of common tools. Extend it by creating:
+## tool registry
+
+Bundled tools in `expaper/templates/registry.yaml`. Extend with:
 
 ```yaml
 # ~/.config/expaper/registry.yaml
@@ -119,81 +134,10 @@ tools:
     description: "My custom tool"
 ```
 
-## Overleaf Integration
+---
 
-### Limitation
+<br>
 
-Overleaf has **no public API for creating projects**. This means:
-- expaper cannot create Overleaf projects programmatically
-- You must create the Overleaf project manually first
-- expaper then links to it via Git for bidirectional sync
-
-### Recommended Workflow
-
-**Option A: Start from Overleaf (recommended for conference papers)**
-
-1. Go to [Overleaf Gallery](https://www.overleaf.com/gallery) and create a project from a conference template (ICML, NeurIPS, ICLR, etc.)
-2. Get the Git URL: Menu → Git → Copy URL
-3. Create your expaper project:
-   ```bash
-   expaper init my-research --overleaf https://git.overleaf.com/YOUR_PROJECT_ID
-   ```
-
-**Option B: Start locally, link later**
-
-1. Create project with blank template:
-   ```bash
-   expaper init my-research --template blank
-   ```
-2. Later, create Overleaf project and link:
-   ```bash
-   cd my-research
-   expaper link-overleaf https://git.overleaf.com/YOUR_PROJECT_ID
-   ```
-
-### Sync Commands
-
-```bash
-# Pull collaborator changes from Overleaf
-expaper sync pull
-
-# Push your local changes to Overleaf
-expaper sync push
-
-# Check sync status
-expaper sync status
-```
-
-### Credentials
-
-Overleaf Git requires authentication:
-- **Username**: Your Overleaf email
-- **Password**: Your Overleaf password (or Git token from Account Settings)
-
-To cache credentials:
-```bash
-git config --global credential.helper cache   # Temporary (15 min)
-git config --global credential.helper store   # Permanent (less secure)
-```
-
-## Complete Workflow
-
-1. **Create Overleaf project** from conference template
-2. **Init expaper project**: `expaper init my-research --overleaf URL`
-3. **Add experiment tools**: `expaper tool add geomancy`
-4. **Run experiments**: `python experiments/scripts/run_experiment tool config`
-5. **Edit paper**: Work in `paper/` directory
-6. **Sync with collaborators**:
-   ```bash
-   expaper sync pull   # Get their changes
-   git add paper/ && git commit -m "Update results"
-   expaper sync push   # Push your changes
-   ```
-7. **Snapshot for reproducibility**:
-   ```bash
-   python experiments/scripts/snapshot_experiment tool exp --tag camera-ready --commit
-   ```
-
-## License
-
-MIT
+<p align="center">
+<sub>MIT License &middot; <a href="https://github.com/latent-reasoning-works">Latent Reasoning Works</a></sub>
+</p>
