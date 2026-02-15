@@ -79,16 +79,16 @@ expaper tool add <name>              # from registry
 expaper tool add <name> <url>        # from URL
 expaper tool list --registry         # show available tools
 
-# overleaf sync
+# local build (free, no Overleaf needed)
+expaper build                        # compile paper/main.tex → main.pdf
+expaper build --clean                # remove artifacts first
+expaper build --open                 # compile + open PDF
+
+# overleaf sync (alternative to local build)
 expaper sync pull                    # pull collaborator changes
 expaper sync push                    # push local changes
 expaper sync status                  # check sync state
 expaper link-overleaf <url>          # link after project creation
-
-# paper templates
-expaper template list                # available templates
-expaper template create <name>       # apply template to paper/
-expaper template export              # export paper/ as ZIP
 ```
 
 ---
