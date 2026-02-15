@@ -139,5 +139,5 @@ tools:
 <br>
 
 <p align="center">
-<sub>MIT License &middot; <a href="https://github.com/latent-reasoning-works">Latent Reasoning Works</a></sub>
+<sub>MIT License &middot; <a href="https://github.com/cmvcordova">cmvcordova</a></sub>
 </p>
