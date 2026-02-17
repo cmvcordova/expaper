@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Mode B: Snapshot experiment config for reproducibility.
-Freezes configuration and pins tool version.
+Snapshot an experiment for reproducibility.
+Generates flattened config (no defaults) and pins tool commit.
 
 Usage:
-  python scripts/snapshot_experiment geomancy integration_test --tag v1.0
-  python scripts/snapshot_experiment geomancy integration_test --tag v1.0 --commit
+  python3 scripts/snapshot_experiment geomancy integration_test --tag v1.0
+  python3 scripts/snapshot_experiment geomancy topology_llm_test --tag thesis-final --commit
 """
 
 import argparse
@@ -13,163 +13,196 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
 
-def load_meta() -> dict:
-    """Load meta.yaml."""
-    meta_path = Path("configs/meta.yaml")
-    if not meta_path.exists():
-        print("[ERROR] configs/meta.yaml not found")
-        sys.exit(1)
-    return yaml.safe_load(meta_path.read_text())
-
-
-def get_tool_commit(tool_path: Path) -> str:
+def get_tool_commit(tool: str) -> str:
     """Get current commit SHA of tool submodule."""
+    tool_path = Path(f"tools/{tool}")
     result = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=tool_path,
         capture_output=True,
         text=True,
     )
-    if result.returncode != 0:
-        return "unknown"
-    return result.stdout.strip()[:7]
+    return result.stdout.strip()[:7] if result.returncode == 0 else "unknown"
 
 
-def resolve_config(tool_info: dict, tool: str, experiment: str) -> str:
-    """Resolve config to flat YAML using Hydra."""
-    entrypoint = tool_info["entrypoint"]
-    tool_dir = Path(tool_info["path"]).resolve()
-    config_dir = Path(f"configs/{tool}").resolve()
+def resolve_config(tool: str, experiment: str, meta: dict) -> Optional[dict]:
+    """Use tool's venv to get fully-resolved config via Hydra --cfg job."""
+    config_path = str(Path(f"configs/{tool}").resolve())
+    tool_info = meta.get("tools", {}).get(tool, {})
+    tool_path = Path(tool_info.get("path", f"tools/{tool}"))
+    entrypoint = tool_info.get("entrypoint", f"-m {tool}.main")
+
+    # Support run_from field for tools that need an inner subdirectory as CWD
+    run_from = tool_info.get("run_from")
+    if run_from:
+        tool_path = tool_path / run_from
 
     if entrypoint.startswith("-m "):
         module = entrypoint[3:]
-        cmd = ["python", "-m", module]
+        cmd = ["python3", "-m", module]
     else:
-        cmd = ["python", entrypoint]
+        cmd = ["python3", entrypoint]
 
-    cmd.extend([
-        f"--config-path={config_dir}",
-        f"--config-name=experiment/{experiment}",
-        "--cfg=job",
-    ])
-
-    # Check if in venv
-    in_venv = sys.prefix != sys.base_prefix
-    if not in_venv:
-        cmd = ["uv", "run"] + cmd
-
-    result = subprocess.run(cmd, cwd=tool_dir, capture_output=True, text=True)
+    # Use group override, not --config-name
+    result = subprocess.run(
+        ["uv", "run"] + cmd + [
+            f"--config-path={config_path}",
+            f"experiment={experiment}",
+            "--cfg", "job",
+        ],
+        cwd=tool_path,
+        capture_output=True,
+        text=True,
+    )
 
     if result.returncode != 0:
-        print(f"[ERROR] Failed to resolve config: {result.stderr}")
-        sys.exit(1)
+        print(f"[ERROR] Config resolution failed: {result.stderr[:500]}")
+        return None
 
-    return result.stdout
+    # Parse YAML output from Hydra --cfg job
+    try:
+        return yaml.safe_load(result.stdout)
+    except Exception as e:
+        print(f"[ERROR] Failed to parse config output: {e}")
+        return None
+
+
+def write_snapshot(tool: str, experiment: str, tag: str, config: dict) -> Path:
+    """Write flattened config to snapshots directory."""
+    snapshot_dir = Path(f"configs/{tool}/snapshots/{tag}")
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    snapshot_file = snapshot_dir / f"{experiment}.yaml"
+
+    # Add metadata header
+    commit = get_tool_commit(tool)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    header = f"""# SNAPSHOT: {tool}/{experiment}
+# TAG: {tag}
+# TOOL_COMMIT: {commit}
+# TIMESTAMP: {timestamp}
+# DO NOT EDIT - regenerate with: python scripts/snapshot_experiment {tool} {experiment} --tag {tag}
+
+"""
+    content = header + yaml.dump(config, default_flow_style=False, sort_keys=False)
+    snapshot_file.write_text(content)
+
+    print(f"[INFO] Snapshot written: {snapshot_file}")
+    return snapshot_file
+
+
+def create_commit(tool: str, experiment: str, tag: str, message: str = None) -> bool:
+    """Commit snapshot with tool pin."""
+    commit_msg = message or f"Snapshot: {tool}/{experiment} @ {tag}"
+
+    # Stage snapshot
+    subprocess.run(["git", "add", f"configs/{tool}/snapshots/{tag}/"])
+
+    # Stage tool submodule (pins to current commit)
+    subprocess.run(["git", "add", f"tools/{tool}"])
+
+    # Commit
+    result = subprocess.run(
+        ["git", "commit", "-m", commit_msg],
+        capture_output=True,
+        text=True,
+    )
+
+    if result.returncode != 0:
+        if "nothing to commit" in result.stdout + result.stderr:
+            print("[INFO] Nothing to commit (already up to date)")
+            return True
+        print(f"[ERROR] Commit failed: {result.stderr}")
+        return False
+
+    print(f"[INFO] Committed: {commit_msg}")
+
+    # Tag
+    tag_name = f"snapshot/{tag}"
+    result = subprocess.run(
+        ["git", "tag", tag_name],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print(f"[INFO] Tagged: {tag_name}")
+    else:
+        print(f"[WARNING] Tag already exists or failed: {tag_name}")
+
+    return True
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Snapshot an experiment config")
-    parser.add_argument("tool", help="Tool name")
-    parser.add_argument("experiment", help="Experiment name")
-    parser.add_argument("--tag", required=True, help="Snapshot tag (e.g., v1.0, camera-ready)")
-    parser.add_argument("--commit", action="store_true", help="Create git commit and tag")
+    parser = argparse.ArgumentParser(description="Snapshot experiment for reproducibility")
+    parser.add_argument("tool", help="Tool name (e.g., geomancy)")
+    parser.add_argument("experiment", help="Experiment name (e.g., integration_test)")
+    parser.add_argument("--tag", required=True, help="Snapshot tag (e.g., v1.0, thesis-final)")
+    parser.add_argument("--commit", action="store_true", help="Commit snapshot with tag")
     parser.add_argument("--message", help="Custom commit message")
     args = parser.parse_args()
 
-    # Validate environment
-    if not Path("configs").exists():
-        print("[ERROR] configs/ directory not found. Run from project root.")
-        sys.exit(1)
-
-    # Load metadata
-    meta = load_meta()
-    tools = meta.get("tools", {})
-
-    if args.tool not in tools:
-        print(f"[ERROR] Tool '{args.tool}' not found in meta.yaml")
-        sys.exit(1)
-
-    tool_info = tools[args.tool]
-    tool_path = Path(tool_info["path"])
-
     # Verify experiment exists
-    experiment_file = Path(f"configs/{args.tool}/experiment/{args.experiment}.yaml")
-    if not experiment_file.exists():
-        print(f"[ERROR] Experiment not found: {experiment_file}")
-        sys.exit(1)
+    exp_file = Path(f"configs/{args.tool}/experiment/{args.experiment}.yaml")
+    if not exp_file.exists():
+        print(f"[ERROR] Experiment not found: {exp_file}")
+        return 1
 
-    print(f"[INFO] Snapshotting: {args.tool}/{args.experiment}")
-    print(f"[INFO] Tag: {args.tag}")
+    # Load meta.yaml for tool info
+    meta_path = Path("configs/meta.yaml")
+    if not meta_path.exists():
+        print("[ERROR] configs/meta.yaml not found")
+        return 1
+    meta = yaml.safe_load(meta_path.read_text())
 
-    # Get tool commit
-    tool_commit = get_tool_commit(tool_path)
-    print(f"[INFO] Tool commit: {tool_commit}")
+    print(f"[INFO] Snapshotting {args.tool}/{args.experiment} as '{args.tag}'")
 
     # Resolve config
-    print("[INFO] Resolving config...")
-    resolved_config = resolve_config(tool_info, args.tool, args.experiment)
+    print("[INFO] Resolving config (flattening defaults)...")
+    config = resolve_config(args.tool, args.experiment, meta)
+    if not config:
+        return 1
 
-    # Create snapshot directory
-    snapshot_dir = Path(f"configs/{args.tool}/snapshots/{args.tag}")
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    # Write snapshot
+    snapshot_path = write_snapshot(args.tool, args.experiment, args.tag, config)
 
-    # Write snapshot file
-    snapshot_file = snapshot_dir / f"{args.experiment}.yaml"
-    timestamp = datetime.now().isoformat()
-
-    header = f"""# SNAPSHOT: {args.tool}/{args.experiment}
-# TAG: {args.tag}
-# TOOL_COMMIT: {tool_commit}
-# TIMESTAMP: {timestamp}
-# DO NOT EDIT - regenerate with: python scripts/snapshot_experiment {args.tool} {args.experiment} --tag {args.tag}
-
-"""
-
-    snapshot_file.write_text(header + resolved_config)
-    print(f"[INFO] Snapshot written: {snapshot_file}")
-
-    # Optionally create git commit
-    if args.commit:
-        print("[INFO] Creating git commit...")
-
-        # Stage snapshot
-        subprocess.run(["git", "add", str(snapshot_dir)])
-
-        # Stage tool submodule (pins current commit)
-        subprocess.run(["git", "add", str(tool_path)])
-
-        # Commit
-        message = args.message or f"Snapshot: {args.tool}/{args.experiment} @ {args.tag}"
-        result = subprocess.run(
-            ["git", "commit", "-m", message],
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode == 0:
-            print(f"[INFO] Committed: {message}")
-
-            # Create tag
-            tag_name = f"snapshot/{args.tag}"
-            subprocess.run(["git", "tag", tag_name])
-            print(f"[INFO] Tagged: {tag_name}")
-        else:
-            if "nothing to commit" in result.stdout:
-                print("[INFO] Nothing to commit (snapshot unchanged)")
-            else:
-                print(f"[WARNING] Commit failed: {result.stderr}")
-
+    # Show summary
+    commit_sha = get_tool_commit(args.tool)
     print("\n" + "=" * 60)
-    print(f"[OK] Snapshot created: {args.tag}")
+    print(f"Snapshot: {args.tool}/{args.experiment}")
+    print(f"Tag: {args.tag}")
+    print(f"Tool commit: {commit_sha}")
+    print(f"Config: {snapshot_path}")
     print("=" * 60)
-    print("\nTo reproduce:")
-    print(f"  git checkout snapshot/{args.tag}")
-    print("  git submodule update --init")
-    print(f"  python scripts/run_experiment {args.tool} {args.experiment}")
+
+    # Optionally commit
+    if args.commit:
+        print("\n[INFO] Creating commit...")
+        if not create_commit(args.tool, args.experiment, args.tag, args.message):
+            return 1
+
+        tool_info = meta.get("tools", {}).get(args.tool, {})
+        entrypoint = tool_info.get("entrypoint", f"-m {args.tool}.main")
+        run_from = tool_info.get("run_from")
+        if run_from:
+            tool_cwd = f"tools/{args.tool}/{run_from}"
+            config_rel = f"../../../configs/{args.tool}"
+        else:
+            tool_cwd = f"tools/{args.tool}"
+            config_rel = f"../../configs/{args.tool}"
+        print("\n[INFO] To reproduce this experiment later:")
+        print(f"  git checkout snapshot/{args.tag}")
+        print("  git submodule update --init")
+        print(f"  cd {tool_cwd}")
+        print(f"  python3 {entrypoint} --config-path={config_rel} experiment={args.experiment}")
+    else:
+        print("\n[INFO] To commit this snapshot:")
+        print(f"  python3 scripts/snapshot_experiment {args.tool} {args.experiment} --tag {args.tag} --commit")
 
     return 0
 

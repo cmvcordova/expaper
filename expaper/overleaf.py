@@ -10,6 +10,47 @@ from rich.console import Console
 console = Console()
 
 
+def get_git_root() -> Optional[Path]:
+    """Get the git repository root directory."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return Path(result.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def get_subtree_prefix() -> str:
+    """Get the correct subtree prefix based on project location.
+
+    In standalone mode (expaper is git root): returns "paper"
+    In monorepo mode (expaper is subdirectory): returns "expaper-name/paper"
+    """
+    project_root = find_project_root()
+    git_root = get_git_root()
+
+    if not project_root or not git_root:
+        return "paper"  # Fallback to default
+
+    # Compute relative path from git root to project root
+    try:
+        rel_path = project_root.relative_to(git_root)
+        if rel_path == Path("."):
+            # Standalone mode: project root IS git root
+            return "paper"
+        else:
+            # Monorepo mode: prefix includes expaper subdirectory
+            return str(rel_path / "paper")
+    except ValueError:
+        # project_root is not under git_root (shouldn't happen)
+        return "paper"
+
+
 def find_project_root() -> Optional[Path]:
     """Find the project root (directory with experiments/ and paper/)."""
     cwd = Path.cwd()
@@ -63,13 +104,14 @@ def sync_pull(squash: bool = True) -> None:
         console.print("[red]Error:[/red] No paper/ directory found")
         raise SystemExit(1)
 
-    console.print("[cyan]Pulling from Overleaf...[/cyan]")
+    prefix = get_subtree_prefix()
+    console.print(f"[cyan]Pulling from Overleaf (prefix: {prefix})...[/cyan]")
 
-    cmd = ["git", "subtree", "pull", "--prefix=paper", "overleaf", "master"]
+    cmd = ["git", "subtree", "pull", f"--prefix={prefix}", "overleaf", "master"]
     if squash:
         cmd.append("--squash")
 
-    result = subprocess.run(cmd, cwd=project_root)
+    result = subprocess.run(cmd, cwd=get_git_root() or project_root)
 
     if result.returncode != 0:
         console.print("[red]Error pulling from Overleaf[/red]")
@@ -96,24 +138,27 @@ def sync_push() -> None:
         console.print("[red]Error:[/red] No paper/ directory found")
         raise SystemExit(1)
 
+    prefix = get_subtree_prefix()
+    git_root = get_git_root() or project_root
+
     # Check for uncommitted changes in paper/
     result = subprocess.run(
-        ["git", "status", "--porcelain", "paper/"],
-        cwd=project_root,
+        ["git", "status", "--porcelain", prefix],
+        cwd=git_root,
         capture_output=True,
         text=True,
     )
     if result.stdout.strip():
-        console.print("[yellow]Warning:[/yellow] Uncommitted changes in paper/")
+        console.print(f"[yellow]Warning:[/yellow] Uncommitted changes in {prefix}/")
         console.print("[dim]Commit your changes first:[/dim]")
-        console.print("[dim]  git add paper/ && git commit -m 'Update paper'[/dim]")
+        console.print(f"[dim]  git add {prefix}/ && git commit -m 'Update paper'[/dim]")
         raise SystemExit(1)
 
-    console.print("[cyan]Pushing to Overleaf...[/cyan]")
+    console.print(f"[cyan]Pushing to Overleaf (prefix: {prefix})...[/cyan]")
 
     result = subprocess.run(
-        ["git", "subtree", "push", "--prefix=paper", "overleaf", "master"],
-        cwd=project_root,
+        ["git", "subtree", "push", f"--prefix={prefix}", "overleaf", "master"],
+        cwd=git_root,
     )
 
     if result.returncode != 0:
@@ -131,7 +176,13 @@ def sync_status() -> None:
         console.print("[red]Error:[/red] Not in an expaper project directory")
         raise SystemExit(1)
 
+    prefix = get_subtree_prefix()
+    git_root = get_git_root() or project_root
+
     console.print("[bold]Overleaf Sync Status[/bold]\n")
+
+    # Show prefix (important for monorepo users)
+    console.print(f"  Prefix: [cyan]{prefix}[/cyan]")
 
     # Check remote
     overleaf_url = get_overleaf_remote()
@@ -151,8 +202,8 @@ def sync_status() -> None:
 
     # Check for local changes
     result = subprocess.run(
-        ["git", "status", "--porcelain", "paper/"],
-        cwd=project_root,
+        ["git", "status", "--porcelain", prefix],
+        cwd=git_root,
         capture_output=True,
         text=True,
     )
@@ -167,7 +218,7 @@ def sync_status() -> None:
     console.print("\n[dim]Fetching from Overleaf...[/dim]")
     subprocess.run(
         ["git", "fetch", "overleaf"],
-        cwd=project_root,
+        cwd=git_root,
         capture_output=True,
     )
 
@@ -186,6 +237,9 @@ def link_overleaf(url: str) -> None:
     if not project_root:
         console.print("[red]Error:[/red] Not in an expaper project directory")
         raise SystemExit(1)
+
+    prefix = get_subtree_prefix()
+    git_root = get_git_root() or project_root
 
     # Validate URL format
     if not url.startswith("https://git.overleaf.com/"):
@@ -213,26 +267,26 @@ def link_overleaf(url: str) -> None:
     # Ensure we have a clean working tree
     result = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=project_root,
+        cwd=git_root,
         capture_output=True,
         text=True,
     )
     if result.stdout.strip():
         console.print("[yellow]Warning:[/yellow] Uncommitted changes detected")
         console.print("[dim]Committing current state before linking...[/dim]")
-        subprocess.run(["git", "add", "."], cwd=project_root)
+        subprocess.run(["git", "add", "."], cwd=git_root)
         subprocess.run(
             ["git", "commit", "-m", "Pre-Overleaf link state"],
-            cwd=project_root,
+            cwd=git_root,
             capture_output=True,
         )
 
-    console.print(f"[cyan]Linking Overleaf project...[/cyan]")
+    console.print(f"[cyan]Linking Overleaf project (prefix: {prefix})...[/cyan]")
 
-    # Add remote
+    # Add remote (at git root level)
     result = subprocess.run(
         ["git", "remote", "add", "overleaf", url],
-        cwd=project_root,
+        cwd=git_root,
         capture_output=True,
         text=True,
     )
@@ -244,24 +298,25 @@ def link_overleaf(url: str) -> None:
     console.print("[dim]Fetching from Overleaf (credentials may be required)...[/dim]")
     result = subprocess.run(
         ["git", "fetch", "overleaf"],
-        cwd=project_root,
+        cwd=git_root,
     )
     if result.returncode != 0:
         console.print("[red]Error fetching from Overleaf[/red]")
-        subprocess.run(["git", "remote", "remove", "overleaf"], cwd=project_root)
+        subprocess.run(["git", "remote", "remove", "overleaf"], cwd=git_root)
         raise SystemExit(1)
 
-    # Add subtree
+    # Add subtree with correct prefix
     result = subprocess.run(
-        ["git", "subtree", "add", "--prefix=paper", "overleaf", "master", "--squash"],
-        cwd=project_root,
+        ["git", "subtree", "add", f"--prefix={prefix}", "overleaf", "master", "--squash"],
+        cwd=git_root,
     )
     if result.returncode != 0:
         console.print("[red]Error adding subtree[/red]")
-        subprocess.run(["git", "remote", "remove", "overleaf"], cwd=project_root)
+        subprocess.run(["git", "remote", "remove", "overleaf"], cwd=git_root)
         raise SystemExit(1)
 
     console.print("[green]Overleaf project linked successfully![/green]")
+    console.print(f"\n[dim]Subtree prefix: {prefix}[/dim]")
     console.print("\n[dim]Sync commands:[/dim]")
     console.print("  expaper sync pull   # Get collaborator changes")
     console.print("  expaper sync push   # Push your changes")

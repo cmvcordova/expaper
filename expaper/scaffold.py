@@ -8,8 +8,6 @@ from datetime import date
 
 from rich.console import Console
 from rich.tree import Tree
-from jinja2 import Environment, PackageLoader
-
 console = Console()
 
 # Directory structure for new projects
@@ -163,13 +161,14 @@ Research project combining experiments and paper writing.
 
 ```bash
 # Add a tool
-python experiments/scripts/add_tool <name> <repo_url>
+python3 experiments/scripts/add_tool <name> <repo_url>
 
-# Run an experiment
-python experiments/scripts/run_experiment <tool> <config_path>
+# Run an experiment (direct invocation from tool directory)
+cd experiments/tools/<tool>
+python3 -m <module>.main --config-path=../../configs/<tool> experiment=<name>
 
 # Snapshot for reproducibility
-python experiments/scripts/snapshot_experiment <tool> <experiment> --tag <tag>
+python3 experiments/scripts/snapshot_experiment <tool> <experiment> --tag <tag>
 ```
 
 ## Overleaf Sync
@@ -193,44 +192,62 @@ def create_claude_md(project_path: Path, project_name: str, dry_run: bool = Fals
     """Create CLAUDE.md for AI assistant context."""
     content = f"""# {project_name}
 
-This is a research project combining experimental work with paper writing.
+Research project combining experiments and paper writing.
 
-## Project Structure
+## Structure
 
-- `experiments/` - experimentStash structure for reproducible experiments
-  - `configs/` - Hydra configuration files
-  - `tools/` - Git submodules for experiment tools
-  - `scripts/` - Automation scripts (add_tool, run_experiment, snapshot_experiment)
-  - `outputs/` - Experiment results (gitignored)
-- `paper/` - LaTeX paper synced with Overleaf via git subtree
-- `shared/` - Resources shared between experiments and paper
-  - `bib/` - Bibliography files
-  - `figures/` - Figures referenced in paper
-
-## Key Commands
-
-Run experiments:
-```bash
-python experiments/scripts/run_experiment <tool> <config>
+```
+experiments/
+  configs/<tool>/          # Hydra config stash (experiment overrides only)
+    experiment/            # Sweep configs (project-specific)
+    config.yaml            # Base defaults list (copied from tool)
+  tools/<tool>/            # Git submodules
+  scripts/                 # add_tool, run_experiment, snapshot_experiment
+  outputs/                 # Experiment results (gitignored)
+paper/                     # LaTeX paper synced with Overleaf
+shared/bib/, figures/      # Shared resources
 ```
 
-Sync paper with Overleaf:
+## Running experiments
+
+Direct invocation from the tool directory (not via bridge scripts):
+
+```bash
+cd experiments/tools/<tool>
+python3 -m <module>.main --config-path=../../configs/<tool> \\
+  experiment=<name> <extra overrides>
+```
+
+Use `experiment=<name>` (Hydra group override), not `--config-name`.
+
+## Config resolution
+
+Three layers, highest priority first:
+1. **CLI overrides** — `data.n_samples=500`
+2. **Config stash** (`--config-path`) — `experiments/configs/<tool>/`
+3. **Package defaults** (`pkg://`) — inside the tool itself
+
+The stash only contains `config.yaml` and `experiment/` overrides.
+Tool configs (algorithms/, data/, metrics/) resolve from pkg:// at runtime.
+Don't copy them into the stash — stale copies silently shadow upstream defaults.
+
+## Extension discovery
+
+Tools register extensions via `pyproject.toml` entry points. The tool discovers
+them with `importlib.metadata.entry_points()` — no hardcoded imports needed.
+
+## Overleaf sync
+
 ```bash
 expaper sync pull   # Get collaborator changes
 expaper sync push   # Push local changes
 ```
 
-## Working with this Project
+## Working with this project
 
-When editing the paper (`paper/`):
-- The paper is synced with Overleaf
-- Run `expaper sync pull` before starting work
-- Run `expaper sync push` after making changes
-
-When running experiments (`experiments/`):
-- Configs are in `experiments/configs/<tool>/`
-- Results go to `experiments/outputs/`
-- Use `snapshot_experiment` before paper submission to pin versions
+- Use `uv` for dependency management, never `pip install`
+- Use `python3` (not `python`) on cluster environments
+- Snapshot experiments before paper submission: `python3 scripts/snapshot_experiment`
 """
     claude_path = project_path / "CLAUDE.md"
     if dry_run:

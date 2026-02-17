@@ -1,0 +1,3 @@
+[submodule "vendor/expstash"]
+	path = vendor/expstash
+	url = https://github.com/cmvcordova/expstash.git

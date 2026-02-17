@@ -2,19 +2,25 @@
 # Users can extend via ~/.config/expaper/registry.yaml
 
 tools:
-  # Example tools - update with actual repositories
+  # Example/testing tools
   hydra-test-tool:
     url: https://github.com/cmvcordova/hydra-test-tool
     entrypoint: src/main.py
     description: "Minimal Hydra tool for testing experimentStash integration"
 
-  # Add your commonly-used tools here:
-  # manylatents:
-  #   url: https://github.com/lrw/manylatents
-  #   entrypoint: "-m manylatents.main"
-  #   description: "Dimensionality reduction and latent space analysis"
-  #
-  # geomancy:
-  #   url: https://github.com/lrw/geomancy
-  #   entrypoint: "-m geomancy.main"
-  #   description: "Geometric deep learning toolkit"
+  # LRW (Latent Reasoning Works) tools
+  geomancy:
+    url: https://github.com/latent-reasoning-works/geomancy
+    entrypoint: "-m geomancy.main"
+    description: "RL Trainer for Scientific Workflows via Geometric Deviation Signals"
+
+  manylatents:
+    url: https://github.com/latent-reasoning-works/manylatents
+    entrypoint: "-m manylatents.main"
+    run_from: manylatents
+    description: "Dimensionality reduction and latent space analysis framework"
+
+  manyagents:
+    url: https://github.com/latent-reasoning-works/manyagents
+    entrypoint: "-m manyagents.main"
+    description: "Agent orchestration for scientific workflows"

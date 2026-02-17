@@ -111,7 +111,7 @@ def add_tool_to_project(
 
     # Run add_tool script
     cmd = [
-        "python",
+        "python3",
         str(add_tool_script),
         name,
         url,

@@ -27,8 +27,10 @@ expaper/
 │   ├── tools.py            # Tool registry + add_tool_to_project
 │   └── templates/
 │       ├── registry.yaml   # Bundled tool registry
-│       ├── scripts/        # experimentStash scripts (add_tool, snapshot_experiment)
+│       ├── scripts/        # Vendored from expstash (add_tool, run_experiment, snapshot_experiment)
 │       └── paper/          # LaTeX templates (blank)
+├── vendor/expstash/        # Submodule: canonical script source
+├── scripts/sync_scripts.py # Sync vendor → templates
 └── pyproject.toml          # CLI entrypoint: expaper = expaper.cli:main
 ```
 
@@ -51,6 +53,19 @@ expaper tool add <name> [url]
 expaper tool list [--registry]
 expaper sync pull | push | status
 expaper link-overleaf <url>
+```
+
+## Script Vendoring
+
+Scripts in `expaper/templates/scripts/` are vendored from expstash.
+The upstream submodule lives at `vendor/expstash/`.
+
+To update after upstream changes:
+```bash
+git -C vendor/expstash pull origin main
+python3 scripts/sync_scripts.py
+git add vendor/expstash expaper/templates/scripts/
+git commit -m "chore: sync scripts from expstash"
 ```
 
 ## Testing

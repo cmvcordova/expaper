@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """
-Mode A: Add a Hydra-based tool to experimentStash.
-Copies tool configs for development/iteration.
+Add a Hydra-based tool to experimentStash.
+
+Only copies config.yaml (base defaults list). Tool configs (algorithms/, data/,
+metrics/) resolve at runtime via pkg:// SearchPathPlugins — copying them creates
+stale shadows that silently override upstream defaults.
 
 Usage:
-  python scripts/add_tool geomancy https://github.com/lrw/geomancy
-  python scripts/add_tool manylatents https://github.com/lrw/manylatents --entrypoint "-m manylatents.main"
+  python3 scripts/add_tool geomancy https://github.com/lrw/geomancy
+  python3 scripts/add_tool manylatents https://github.com/lrw/manylatents --entrypoint "-m manylatents.main"
 """
 
 import argparse
@@ -45,30 +48,70 @@ def install_deps(name: str) -> bool:
     return run(["uv", "sync"], cwd=tool_path)
 
 
-def copy_configs(name: str) -> bool:
-    """Copy tool configs to top-level."""
+def setup_configs(name: str) -> bool:
+    """Set up config stash — only copy config.yaml, create experiment/ dir.
+
+    Tool configs (algorithms/, data/, metrics/, etc.) resolve at runtime via
+    Hydra's pkg:// SearchPathPlugin. Copying them into the stash creates stale
+    shadows that silently override upstream defaults.
+    """
     tool_config = Path(f"tools/{name}/{name}/configs")
     if not tool_config.exists():
-        # Try alternate structure
         tool_config = Path(f"tools/{name}/configs")
-
-    if not tool_config.exists():
-        print(f"[WARNING] No configs found at {tool_config}")
-        return True
 
     dst = Path(f"configs/{name}")
     dst.mkdir(parents=True, exist_ok=True)
 
-    # Copy all config directories
-    for item in tool_config.iterdir():
-        if item.is_dir():
-            shutil.copytree(item, dst / item.name, dirs_exist_ok=True)
-            print(f"  Copied: {item.name}/")
-        elif item.suffix in (".yaml", ".yml"):
-            shutil.copy2(item, dst / item.name)
-            print(f"  Copied: {item.name}")
+    # Create experiment directory for project-specific overrides
+    (dst / "experiment").mkdir(exist_ok=True)
 
-    print(f"[INFO] Configs copied to {dst}")
+    # Copy only config.yaml (the base defaults list)
+    base_config = tool_config / "config.yaml"
+    if base_config.exists():
+        shutil.copy2(base_config, dst / "config.yaml")
+        print(f"  Copied: config.yaml (base defaults)")
+    elif tool_config.exists():
+        print(f"[WARNING] No config.yaml found at {tool_config}")
+    else:
+        print(f"[WARNING] No configs found at {tool_config}")
+
+    print(f"[INFO] Config stash created at {dst}")
+    print(f"  Project-specific experiment configs go in {dst / 'experiment'}/")
+    print(f"  Tool configs (algorithms/, data/, etc.) resolve from pkg:// at runtime")
+    return True
+
+
+def check_extensions(name: str) -> bool:
+    """Check for entry-point extensions registered by the tool."""
+    tool_path = Path(f"tools/{name}")
+    venv_python = tool_path / ".venv" / "bin" / "python3"
+    if not venv_python.exists():
+        venv_python = tool_path / ".venv" / "bin" / "python"
+
+    if not venv_python.exists():
+        print("[INFO] No venv found — skipping extension check")
+        return True
+
+    code = (
+        "from importlib.metadata import entry_points; "
+        "eps = entry_points(); "
+        "groups = [g for g in (eps if isinstance(eps, dict) else {}) "
+        "if 'searchpath' in g or 'hydra' in g]; "
+        "[print(f'  {g}: {e.name} -> {e.value}') "
+        "for g in sorted(set(groups)) for e in "
+        "(eps[g] if isinstance(eps, dict) else eps(group=g))]"
+    )
+    result = subprocess.run(
+        [str(venv_python), "-c", code],
+        cwd=tool_path,
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout.strip():
+        print("[INFO] Discovered extension entry points:")
+        print(result.stdout.rstrip())
+    else:
+        print("[INFO] No extension entry points found (extensions register via pkg:// SearchPathPlugins)")
     return True
 
 
@@ -127,7 +170,8 @@ def main():
     steps = [
         ("Add submodule", lambda: add_submodule(args.name, args.repo_url)),
         ("Install deps", lambda: install_deps(args.name) if not args.skip_deps else True),
-        ("Copy configs", lambda: copy_configs(args.name)),
+        ("Check extensions", lambda: check_extensions(args.name)),
+        ("Setup configs", lambda: setup_configs(args.name)),
         ("Update meta.yaml", lambda: update_meta(args.name, entrypoint, description)),
         ("Verify decorator", lambda: verify_decorator(args.name)),
     ]
@@ -141,10 +185,9 @@ def main():
     print("\n" + "=" * 60)
     print(f"[OK] Tool '{args.name}' added successfully!")
     print("=" * 60)
-    print("\nSmoke test:")
-    print(f"  python scripts/run_experiment {args.name} <experiment> --validate-only")
-    print(f"\nRun experiment:")
-    print(f"  python scripts/run_experiment {args.name} <experiment>")
+    print(f"\nDirect invocation:")
+    print(f"  cd tools/{args.name}")
+    print(f"  python3 {entrypoint} --config-path=../../configs/{args.name} experiment=<name>")
     return 0
 
 
