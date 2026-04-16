@@ -154,8 +154,14 @@ Research project combining experiments and paper writing.
 ├── shared/               # Shared resources
 │   ├── bib/              # Bibliography
 │   └── figures/          # Figures for paper
-└── CLAUDE.md             # AI assistant context
+└── CLAUDE.md             # AI context + writing directives (tune before writing)
 ```
+
+## Writing directives
+
+`CLAUDE.md` includes a **Writing directives** section at the bottom.
+**Tune it before writing**: set your target venue (NeurIPS / ICML / blog),
+delete the format you're not using, and add co-author style preferences.
 
 ## Experiment Commands
 
@@ -249,6 +255,11 @@ expaper sync push   # Push local changes
 - Use `python3` (not `python`) on cluster environments
 - Snapshot experiments before paper submission: `python3 scripts/snapshot_experiment`
 """
+    # Append writing directives from template
+    writing_template = get_template_dir() / "writing-directive.md"
+    if writing_template.exists():
+        content += "\n" + writing_template.read_text()
+
     claude_path = project_path / "CLAUDE.md"
     if dry_run:
         console.print(f"  [dim]write[/dim] CLAUDE.md")
