@@ -97,13 +97,27 @@ expaper link-overleaf <url>          # link after project creation
 
 ```
 1. expaper init my-paper --overleaf URL
-2. expaper tool add manylatents
-3. cd experiments/tools/manylatents
+2. open CLAUDE.md — set venue in the Writing directives section, delete unused format
+3. expaper tool add manylatents
+4. cd experiments/tools/manylatents
    uv run python -m manylatents.main --multirun ...
-4. edit paper/main.tex with results
-5. expaper sync push
-6. python3 experiments/scripts/snapshot_experiment manylatents exp --tag v1
+5. edit paper/main.tex with results
+6. expaper sync push
+7. python3 experiments/scripts/snapshot_experiment manylatents exp --tag v1
 ```
+
+---
+
+## writing directives
+
+Every project's `CLAUDE.md` includes a **Writing directives** section at the bottom — a high-level style guide for AI-assisted drafting that covers both conference paper and technical blog formats.
+
+**Tune it before writing:**
+- Pick your format (paper or blog) and delete the other block
+- Set the venue name so the AI knows page budget, citation style, and heading conventions
+- Add co-author style preferences
+
+The directives live in the root `CLAUDE.md`, not in `paper/`, so they are never synced to Overleaf.
 
 ---
 

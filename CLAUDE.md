@@ -28,7 +28,8 @@ expaper/
 │   └── templates/
 │       ├── registry.yaml   # Bundled tool registry
 │       ├── scripts/        # Vendored from expstash (add_tool, run_experiment, snapshot_experiment)
-│       └── paper/          # LaTeX templates (blank)
+│       ├── paper/          # LaTeX templates (blank)
+│       └── writing-directive.md  # Appended to project CLAUDE.md on init
 ├── vendor/expstash/        # Submodule: canonical script source
 ├── scripts/sync_scripts.py # Sync vendor → templates
 └── pyproject.toml          # CLI entrypoint: expaper = expaper.cli:main
@@ -41,6 +42,7 @@ expaper/
 - **Local build = tectonic** — `expaper build` compiles paper/main.tex. Free, no Overleaf needed.
 - **Tools = git submodule** — pinned commits, isolated deps via `uv sync`.
 - **CLAUDE.md delegation** — root points to subdirectory contexts, never duplicates.
+- **Writing directives live at project root** — `expaper/templates/writing-directive.md` is appended to the generated `CLAUDE.md` on init. Kept out of `paper/` so it is never synced to Overleaf.
 - **Interactive by default** — prompts for tools + Overleaf on init, skip with `--no-interactive`.
 - **Config copies are read-only** — customization via CLI overrides or experiment YAML only.
 
