@@ -83,6 +83,35 @@ def has_paper_directory() -> bool:
     return False
 
 
+def _last_absorbed_overleaf_sha(git_root: Path, prefix: str) -> Optional[str]:
+    """Return the most recent overleaf SHA already absorbed into the subtree.
+
+    `git subtree add/pull --squash` records a `git-subtree-split: <sha>` trailer
+    on the merge commit, scoped to `git-subtree-dir: <prefix>`. We grep for the
+    most recent such commit and extract the split SHA.
+    """
+    result = subprocess.run(
+        [
+            "git", "log",
+            f"--grep=git-subtree-dir: {prefix}",
+            "--grep=git-subtree-split:",
+            "--all-match",
+            "-n", "1",
+            "--format=%b",
+        ],
+        cwd=git_root,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("git-subtree-split:"):
+            return line.split(":", 1)[1].strip()
+    return None
+
+
 def sync_pull(squash: bool = True) -> None:
     """Pull changes from Overleaf.
 
@@ -152,6 +181,66 @@ def sync_push() -> None:
         console.print(f"[yellow]Warning:[/yellow] Uncommitted changes in {prefix}/")
         console.print("[dim]Commit your changes first:[/dim]")
         console.print(f"[dim]  git add {prefix}/ && git commit -m 'Update paper'[/dim]")
+        raise SystemExit(1)
+
+    console.print("[dim]Fetching from Overleaf to check for incoming changes...[/dim]")
+    fetch = subprocess.run(
+        ["git", "fetch", "overleaf"],
+        cwd=git_root,
+        capture_output=True,
+        text=True,
+    )
+    if fetch.returncode != 0:
+        console.print("[red]Error fetching from Overleaf[/red]")
+        if fetch.stderr:
+            console.print(f"[dim]{fetch.stderr.strip()}[/dim]")
+        raise SystemExit(1)
+
+    last_split = _last_absorbed_overleaf_sha(git_root, prefix)
+    if last_split is None:
+        console.print(
+            "[red]Refusing to push:[/red] could not locate a prior "
+            "[cyan]git-subtree-split[/cyan] marker for "
+            f"prefix [cyan]{prefix}[/cyan]."
+        )
+        console.print(
+            "[dim]Without it we cannot tell whether Overleaf has "
+            "unabsorbed commits, so pushing risks overwriting "
+            "collaborator edits. Run [cyan]expaper sync pull[/cyan] "
+            "first, then retry.[/dim]"
+        )
+        raise SystemExit(1)
+
+    rev_list = subprocess.run(
+        ["git", "rev-list", "--count", f"{last_split}..overleaf/master"],
+        cwd=git_root,
+        capture_output=True,
+        text=True,
+    )
+    if rev_list.returncode != 0:
+        console.print(
+            "[red]Refusing to push:[/red] could not compare local "
+            "subtree state against [cyan]overleaf/master[/cyan]."
+        )
+        if rev_list.stderr:
+            console.print(f"[dim]{rev_list.stderr.strip()}[/dim]")
+        raise SystemExit(1)
+    try:
+        ahead = int(rev_list.stdout.strip() or "0")
+    except ValueError:
+        ahead = 0
+    if ahead > 0:
+        console.print(
+            f"[red]Refusing to push:[/red] {ahead} commit(s) on "
+            "[cyan]overleaf/master[/cyan] have not been absorbed into "
+            "the local subtree."
+        )
+        console.print(
+            "[dim]Pushing now would risk overwriting collaborator "
+            "edits as a whole-file replacement. Run "
+            "[cyan]expaper sync pull[/cyan] first, resolve any "
+            "conflicts, then retry.[/dim]"
+        )
         raise SystemExit(1)
 
     console.print(f"[cyan]Pushing to Overleaf (prefix: {prefix})...[/cyan]")

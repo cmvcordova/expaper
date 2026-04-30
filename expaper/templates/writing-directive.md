@@ -79,4 +79,15 @@ Em dashes (—) no spaces, for sharp asides only—use sparingly. En dashes (–
 
 Acknowledge limitations clearly and early—not in a footnote, not in the last line of the conclusion. A reader who discovers an unacknowledged limitation will distrust the rest; one who sees you flag it first will trust your results more.
 
+---
+
+### Overleaf sync workflow
+
+Treat `overleaf/master` as a live coauthor. Between any two of your local commits, collaborators may have written into Overleaf. The danger is silently replacing their edits with a whole-file overwrite on push.
+
+- **Always pull before pushing.** Run `expaper sync pull` (or `git fetch overleaf` + diff) before any `expaper sync push` or direct push to overleaf master. The CLI refuses to push when `overleaf/master` has unabsorbed commits — do not work around the gate.
+- **Never paste/replace `paper/main.tex` end-to-end.** Make scoped edits to specific sections so the Overleaf diff log shows specific revisions. A diff that marks nearly all old lines deleted and nearly all new lines added is a clobber pattern, not a revision.
+- **When merging incoming Overleaf edits, default to keeping their version** for any section you did not intentionally touch. Re-apply your local edits manually after the merge if needed.
+- **Respect section locks.** If a coauthor says "I'm rewriting §X, don't touch it," leave §X alone — even when tightening adjacent sections.
+
 <!-- Tuning: set venue in the Format block above, delete the unused format, add co-author preferences here -->
