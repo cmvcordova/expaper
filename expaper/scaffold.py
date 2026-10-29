@@ -533,6 +533,7 @@ def create_agent_state(project_path: Path, project_name: str, dry_run: bool = Fa
             console.print(f"  [dim]write[/dim] docs/agent-state/{name}")
         console.print("  [dim]write[/dim] .claude/settings.json")
         console.print("  [dim]append[/dim] CLAUDE.md (shared agent state section)")
+        console.print("  [dim]write[/dim] AGENTS.md (shared agent state section, for Codex and other agents)")
         return
     dst.mkdir(parents=True, exist_ok=True)
     for name_in, name_out in files.items():
@@ -544,6 +545,12 @@ def create_agent_state(project_path: Path, project_name: str, dry_run: bool = Fa
     snippet = (src / "CLAUDE-snippet.md").read_text()
     if claude_md.exists() and "@docs/agent-state/board.md" not in claude_md.read_text():
         claude_md.write_text(claude_md.read_text().rstrip() + "\n\n" + snippet)
+    agents_md = project_path / "AGENTS.md"
+    agents_snippet = (src / "AGENTS-snippet.md").read_text()
+    if not agents_md.exists():
+        agents_md.write_text(f"# AGENTS.md: how to work in {project_name}\n\n" + agents_snippet)
+    elif "## Shared agent state" not in agents_md.read_text():
+        agents_md.write_text(agents_md.read_text().rstrip() + "\n\n" + agents_snippet)
 
 
 def init_git(project_path: Path, dry_run: bool = False) -> None:
