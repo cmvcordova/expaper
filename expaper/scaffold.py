@@ -490,9 +490,9 @@ Format:
         prov_path.write_text(content)
 
 
-# Shared agent state (LRW). Templates mirror shop/claude-plugins/lrw-agent-state/templates; keep the two in sync.
+# Shared agent state (LRW). Templates mirror latent-reasoning-works/claude-plugins plugins/lrw-agent-state/templates; keep the two in sync.
 LRW_MARKETPLACE = "lrw"
-LRW_MARKETPLACE_REPO = "latent-reasoning-works/shop"
+LRW_MARKETPLACE_REPO = "latent-reasoning-works/claude-plugins"
 LRW_AGENT_STATE_PLUGIN = "lrw-agent-state"
 
 
