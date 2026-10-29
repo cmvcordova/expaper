@@ -490,6 +490,62 @@ Format:
         prov_path.write_text(content)
 
 
+# Shared agent state (LRW). Templates mirror shop/claude-plugins/lrw-agent-state/templates; keep the two in sync.
+LRW_MARKETPLACE = "lrw"
+LRW_MARKETPLACE_REPO = "latent-reasoning-works/shop"
+LRW_AGENT_STATE_PLUGIN = "lrw-agent-state"
+
+
+def _git_user_slug() -> str:
+    """Lower-case first name from `git config user.name`, for the first log file; 'lead' if unset."""
+    try:
+        out = subprocess.run(["git", "config", "user.name"], capture_output=True, text=True).stdout.strip()
+    except OSError:
+        out = ""
+    import unicodedata
+    first = out.split()[0] if out else "lead"
+    ascii_first = unicodedata.normalize("NFKD", first).encode("ascii", "ignore").decode()
+    return "".join(ch for ch in ascii_first.lower() if ch.isalnum()) or "lead"
+
+
+def create_agent_state(project_path: Path, project_name: str, dry_run: bool = False) -> None:
+    """Seed docs/agent-state/ (board, ledger, decisions, a log), the CLAUDE.md section that imports the board, and
+    .claude/settings.json enabling the lrw-agent-state plugin, so collaborators' Claude sessions share state through git."""
+    import json
+
+    src = get_template_dir() / "agent-state"
+    dst = project_path / "docs" / "agent-state"
+    person = _git_user_slug()
+    subs = {"{{PROJECT}}": project_name, "{{DATE}}": date.today().isoformat(), "{{LEAD}}": person,
+            "{{PERSON}}": person, "{{OWNER_ROWS}}": f"| {person} | (free) | |"}
+
+    def fill(text: str) -> str:
+        for k, v in subs.items():
+            text = text.replace(k, v)
+        return text
+
+    files = {"README.md": "README.md", "board.md": "board.md", "ledger.md": "ledger.md",
+             "decisions.md": "decisions.md", "log.md": f"log-{person}.md"}
+    settings = {"extraKnownMarketplaces": {LRW_MARKETPLACE: {"source": {"source": "github", "repo": LRW_MARKETPLACE_REPO}}},
+                "enabledPlugins": {f"{LRW_AGENT_STATE_PLUGIN}@{LRW_MARKETPLACE}": True}}
+    if dry_run:
+        for name in files.values():
+            console.print(f"  [dim]write[/dim] docs/agent-state/{name}")
+        console.print("  [dim]write[/dim] .claude/settings.json")
+        console.print("  [dim]append[/dim] CLAUDE.md (shared agent state section)")
+        return
+    dst.mkdir(parents=True, exist_ok=True)
+    for name_in, name_out in files.items():
+        (dst / name_out).write_text(fill((src / name_in).read_text()))
+    claude_dir = project_path / ".claude"
+    claude_dir.mkdir(exist_ok=True)
+    (claude_dir / "settings.json").write_text(json.dumps(settings, indent=2) + "\n")
+    claude_md = project_path / "CLAUDE.md"
+    snippet = (src / "CLAUDE-snippet.md").read_text()
+    if claude_md.exists() and "@docs/agent-state/board.md" not in claude_md.read_text():
+        claude_md.write_text(claude_md.read_text().rstrip() + "\n\n" + snippet)
+
+
 def init_git(project_path: Path, dry_run: bool = False) -> None:
     """Initialize git repository."""
     if dry_run:
@@ -640,6 +696,7 @@ def create_project(
     create_experiments_claude_md(project_path, dry_run)
     create_experiment_log(project_path, name, dry_run)
     create_provenance(project_path, name, dry_run)
+    create_agent_state(project_path, name, dry_run)
 
     # Initialize git
     init_git(project_path, dry_run)

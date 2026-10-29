@@ -163,3 +163,8 @@ ehthumbs.db
 *.tmp
 scratch/
 tmp/
+
+# Claude Code: commit .claude/settings.json (shared plugin + hooks), keep personal settings local
+.claude/settings.local.json
+.claude/worktrees/
+CLAUDE.local.md
